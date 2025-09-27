@@ -59,6 +59,10 @@ curl http://localhost:8080  # Spark Master
 curl http://localhost:8088  # Airflow
 curl http://localhost:9001  # MinIO Console
 curl http://localhost:8089  # Trino
+
+# Advanced health checks
+docker-compose ps                    # Check all service statuses
+docker-compose logs -f [service]     # Monitor service logs
 ```
 
 ## Architecture Overview
@@ -92,7 +96,13 @@ config/
 ├── spark/spark-defaults.conf    # Spark cluster settings with Iceberg integration
 └── trino/catalog/               # Trino data source catalogs
     ├── iceberg.properties       # Iceberg catalog configuration
-    └── postgres.properties      # PostgreSQL federation
+    ├── postgres.properties      # PostgreSQL federation
+    └── config.properties        # Trino coordinator settings
+
+scripts/
+└── init-postgres.sh             # PostgreSQL database initialization
+
+.env.example                     # Environment variable template
 ```
 
 ### Key Configuration Files
@@ -177,6 +187,12 @@ Required JAR files must be downloaded to `jars/` directory:
 - `hadoop-aws-3.3.4.jar`
 - `postgresql-42.5.1.jar`
 
+Download commands (see README.md for specific URLs):
+```bash
+mkdir -p jars
+wget -P jars/ [JAR_URLS]
+```
+
 ## Data Storage
 
 ### MinIO Buckets
@@ -227,4 +243,30 @@ dc-hub up -d
 docker-compose -f docker-compose.spark.yml up -d --scale spark-worker=3
 
 # Scale horizontally by adjusting worker resources in compose files
+```
+
+## Testing and Linting
+
+```bash
+# Lint Docker Compose files
+dclint docker-compose*.yml
+
+# Validate compose configuration
+docker-compose config
+
+# Test individual services
+docker-compose up -d postgres minio  # Start subset for testing
+```
+
+## Container Management
+
+```bash
+# Access containers
+docker exec -it data-hub-postgres psql -U admin
+docker exec -it data-hub-trino trino
+docker exec -it data-hub-spark-master /opt/spark/bin/spark-shell
+
+# Container naming convention: data-hub-[service-name]
+# Network: data-hub-network (172.28.0.0/16)
+# Volumes: [service]-data, shared-workspace
 ```
