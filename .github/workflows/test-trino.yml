@@ -1,0 +1,138 @@
+name: Test Trino
+
+on:
+  push:
+    paths:
+      - 'docker-compose.trino.yml'
+      - 'config/trino/**'
+      - '.github/workflows/test-trino.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.trino.yml'
+      - 'config/trino/**'
+  workflow_dispatch:
+
+jobs:
+  test-trino:
+    name: Test Trino Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=admin
+          POSTGRES_PASSWORD=admin123
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          EOF
+      
+      - name: Create required directories and files
+        run: |
+          mkdir -p config/trino/catalog scripts jars
+          
+          # Create Trino configuration files
+          cat > config/trino/config.properties <<EOF
+          coordinator=true
+          node-scheduler.include-coordinator=true
+          http-server.http.port=8080
+          query.max-memory=2GB
+          query.max-memory-per-node=1GB
+          discovery-server.enabled=true
+          discovery.uri=http://localhost:8080
+          EOF
+          
+          cat > config/trino/jvm.config <<EOF
+          -server
+          -Xmx2G
+          -XX:+UseG1GC
+          -XX:G1HeapRegionSize=32M
+          -XX:+UseGCOverheadLimit
+          -XX:+ExplicitGCInvokesConcurrent
+          -XX:+HeapDumpOnOutOfMemoryError
+          -XX:+ExitOnOutOfMemoryError
+          -Djdk.attach.allowAttachSelf=true
+          EOF
+          
+          cat > config/trino/catalog/postgres.properties <<EOF
+          connector.name=postgresql
+          connection-url=jdbc:postgresql://postgres:5432/postgres
+          connection-user=admin
+          connection-password=admin123
+          EOF
+          
+          # Create PostgreSQL init script
+          cat > scripts/init-postgres.sh <<'EOF'
+          #!/bin/bash
+          set -e
+          psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+              CREATE DATABASE hive_metastore;
+              CREATE DATABASE trino;
+          EOSQL
+          EOF
+          chmod +x scripts/init-postgres.sh
+          
+          # Create dummy JARs
+          touch jars/postgresql-42.5.1.jar
+          touch jars/aws-java-sdk-bundle-1.12.367.jar
+          touch jars/hadoop-aws-3.3.4.jar
+      
+      - name: Start dependencies
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml -f docker-compose.minio.yml up -d
+          
+          # Wait for dependencies
+          timeout 60 bash -c 'until docker exec data-hub-postgres pg_isready -U admin; do sleep 2; done'
+          timeout 60 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 2; done'
+      
+      - name: Start Hive Metastore
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.hive.yml up -d
+          sleep 30  # Give Hive Metastore time to initialize
+      
+      - name: Start Trino
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.trino.yml up -d
+      
+      - name: Wait for Trino to be healthy
+        run: |
+          timeout 120 bash -c 'until curl -f http://localhost:8089/v1/info; do sleep 5; done'
+          echo "Trino is healthy"
+      
+      - name: Test Trino queries
+        run: |
+          # Test basic query
+          docker exec data-hub-trino trino --execute "SELECT 1"
+          
+          # Test PostgreSQL connector
+          docker exec data-hub-trino trino --execute "SHOW CATALOGS" | grep postgres
+          
+          # Test system information
+          docker exec data-hub-trino trino --execute "SELECT * FROM system.runtime.nodes"
+      
+      - name: Test Trino REST API
+        run: |
+          # Test cluster info
+          curl -s http://localhost:8089/v1/info | python3 -m json.tool
+          
+          # Test node info
+          curl -s http://localhost:8089/v1/node | python3 -m json.tool
+      
+      - name: Check logs for errors
+        if: failure()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.trino.yml logs trino
+          docker-compose -f docker-compose.base.yml -f docker-compose.hive.yml logs hive-metastore
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose \
+            -f docker-compose.base.yml \
+            -f docker-compose.postgres.yml \
+            -f docker-compose.minio.yml \
+            -f docker-compose.hive.yml \
+            -f docker-compose.trino.yml \
+            down -v

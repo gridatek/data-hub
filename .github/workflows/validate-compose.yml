@@ -1,0 +1,80 @@
+name: Validate All Compose Files
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'docker-compose.*.yml'
+      - '.github/workflows/*.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'docker-compose.*.yml'
+      - '.github/workflows/*.yml'
+  workflow_dispatch:
+
+jobs:
+  validate-syntax:
+    name: Validate YAML Syntax
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compose-file:
+          - docker-compose.base.yml
+          - docker-compose.postgres.yml
+          - docker-compose.minio.yml
+          - docker-compose.hive.yml
+          - docker-compose.spark.yml
+          - docker-compose.airflow.yml
+          - docker-compose.trino.yml
+          - docker-compose.jupyter.yml
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Validate YAML syntax
+        run: |
+          python -c "import yaml; yaml.safe_load(open('${{ matrix.compose-file }}'))"
+      
+      - name: Validate Docker Compose syntax
+        run: |
+          docker-compose -f ${{ matrix.compose-file }} config > /dev/null
+      
+      - name: Check for required environment variables
+        run: |
+          docker-compose -f docker-compose.base.yml -f ${{ matrix.compose-file }} config > /dev/null
+
+  lint-compose:
+    name: Lint Compose Files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install docker-compose-linter
+        run: |
+          npm install -g docker-compose-linter
+      
+      - name: Lint all compose files
+        run: |
+          for file in docker-compose.*.yml; do
+            echo "Linting $file..."
+            docker-compose-linter -f $file || true
+          done
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run Trivy security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'

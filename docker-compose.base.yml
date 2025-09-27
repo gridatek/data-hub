@@ -1,0 +1,33 @@
+version: '3.8'
+
+networks:
+  data-hub:
+    driver: bridge
+    name: data-hub-network
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres-data:
+    driver: local
+  minio-data:
+    driver: local
+  airflow-logs:
+    driver: local
+  spark-logs:
+    driver: local
+  jupyter-work:
+    driver: local
+  shared-workspace:
+    driver: local
+
+x-common-variables: &common-variables
+  TZ: UTC
+  PYTHONUNBUFFERED: 1
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 30s

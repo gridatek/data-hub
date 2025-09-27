@@ -1,0 +1,70 @@
+name: Test PostgreSQL
+
+on:
+  push:
+    paths:
+      - 'docker-compose.postgres.yml'
+      - 'scripts/init-postgres.sh'
+      - '.github/workflows/test-postgres.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.postgres.yml'
+      - 'scripts/init-postgres.sh'
+  workflow_dispatch:
+
+jobs:
+  test-postgres:
+    name: Test PostgreSQL Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=admin
+          POSTGRES_PASSWORD=admin123
+          EOF
+      
+      - name: Create init script
+        run: |
+          mkdir -p scripts
+          cat > scripts/init-postgres.sh <<'EOF'
+          #!/bin/bash
+          set -e
+          psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+              CREATE DATABASE airflow;
+              CREATE DATABASE hive_metastore;
+              CREATE DATABASE trino;
+          EOSQL
+          EOF
+          chmod +x scripts/init-postgres.sh
+      
+      - name: Start PostgreSQL
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml up -d
+      
+      - name: Wait for PostgreSQL to be healthy
+        run: |
+          timeout 60 bash -c 'until docker exec data-hub-postgres pg_isready -U admin; do sleep 2; done'
+      
+      - name: Test database connections
+        run: |
+          docker exec data-hub-postgres psql -U admin -c "\l" | grep -E "airflow|hive_metastore|trino"
+      
+      - name: Test data persistence
+        run: |
+          docker exec data-hub-postgres psql -U admin -d airflow -c "CREATE TABLE test (id int);"
+          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml restart postgres
+          sleep 10
+          docker exec data-hub-postgres psql -U admin -d airflow -c "\dt" | grep test
+      
+      - name: Check logs for errors
+        if: failure()
+        run: docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml logs postgres
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml down -v

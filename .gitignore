@@ -1,0 +1,560 @@
+# ============================================
+# Modern Data Hub - Git Ignore Configuration
+# ============================================
+
+# ============================================
+# Environment & Secrets
+# ============================================
+.env
+.env.*
+!.env.example
+!.env.template
+*.env
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+.vault
+vault.json
+
+# ============================================
+# Data & Storage Directories
+# ============================================
+data/
+data-volume/
+warehouse/
+lake/
+raw-data/
+processed-data/
+staging/
+temp/
+tmp/
+cache/
+.cache/
+
+# ============================================
+# Logs & Runtime Files
+# ============================================
+logs/
+*.log
+*.log.*
+*.out
+*.err
+airflow-logs/
+spark-logs/
+spark-warehouse/
+spark-events/
+.spark-history/
+derby.log
+metastore_db/
+
+# ============================================
+# MinIO Data
+# ============================================
+minio-data/
+.minio/
+minio-config/
+buckets/
+
+# ============================================
+# PostgreSQL Data
+# ============================================
+postgres-data/
+postgresql-data/
+pgdata/
+*.sql.backup
+*.dump
+*.sql.gz
+backup/
+backups/
+
+# ============================================
+# Airflow
+# ============================================
+airflow.db
+airflow-webserver.pid
+airflow.cfg
+!config/airflow/airflow.cfg
+unittests.cfg
+airflow_home/
+dags/__pycache__/
+plugins/__pycache__/
+.airflow/
+airflow-worker.pid
+airflow-scheduler.pid
+standalone_admin_password.txt
+
+# ============================================
+# Spark
+# ============================================
+spark-warehouse/
+.spark/
+checkpoint/
+checkpoints/
+*.crc
+_SUCCESS
+_temporary/
+.part-*
+
+# ============================================
+# Jupyter / IPython
+# ============================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+.jupyter/
+.local/
+jupyter-work/
+notebooks/.ipynb_checkpoints/
+notebooks/*_local.ipynb
+notebooks/scratch/
+notebooks/tmp/
+
+# ============================================
+# Python
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.python-version
+.pyenv/
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.virtualenv/
+.conda/
+*.pyc
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# ============================================
+# Java / Scala
+# ============================================
+*.class
+*.jar
+!jars/*.jar
+!libs/*.jar
+target/
+project/target/
+project/project/
+.bsp/
+.metals/
+.bloop/
+metals.sbt
+.idea/
+*.iml
+*.iws
+*.ipr
+.scala_dependencies
+.worksheet
+
+# ============================================
+# Node.js (for any web UIs or tools)
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+.npm
+.yarn-integrity
+.yarn/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ============================================
+# Docker
+# ============================================
+.dockerignore
+docker-compose.override.yml
+docker-compose.override.yaml
+.docker/
+*.dockerignore
+!.dockerignore
+
+# ============================================
+# Terraform (if using IaC)
+# ============================================
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# ============================================
+# IDE & Editors
+# ============================================
+
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+*.vsix
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+.idea_modules/
+
+# Eclipse
+.metadata/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+.loadpath
+.recommenders/
+.externalToolBuilders/
+*.pydevproject
+.cproject
+.autotools
+.factorypath
+.buildpath
+.target
+.tern-project
+.texlipse
+.springBeans
+.recommenders/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+*~
+tags
+[._]*.un~
+
+# Emacs
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+.org-id-locations
+*_archive
+*_flymake.*
+/eshell/history
+/eshell/lastdir
+/elpa/
+*.rel
+/auto/
+.cask/
+flycheck_*.el
+/server/
+.projectile
+.dir-locals.el
+/network-security.data
+
+# ============================================
+# Operating System Files
+# ============================================
+
+# macOS
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+*.icloud
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# Testing & CI/CD
+# ============================================
+test-reports/
+test-results/
+test-output/
+*.test
+*.spec
+.nyc_output/
+coverage/
+.coverage-reports/
+junit.xml
+test-*.xml
+*-test-results.xml
+allure-results/
+allure-report/
+screenshots/
+videos/
+.scannerwork/
+sonar-project.properties
+
+# ============================================
+# Parquet & Data Files
+# ============================================
+*.parquet
+*.avro
+*.orc
+*.csv
+!sample-data/*.csv
+!test-data/*.csv
+*.json
+!config/**/*.json
+!package.json
+!package-lock.json
+*.jsonl
+*.ndjson
+*.xlsx
+*.xls
+!templates/*.xlsx
+!templates/*.xls
+*.arrow
+
+# ============================================
+# ML/AI Model Files
+# ============================================
+models/
+model-artifacts/
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+*.sav
+*.pb
+*.pth
+*.pt
+*.onnx
+*.pmml
+mlruns/
+mlflow.db
+mlflow-artifacts/
+
+# ============================================
+# Compressed Files
+# ============================================
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.gz
+!scripts/*.tar.gz
+*.bz2
+
+# ============================================
+# Certificates & Keys (additional)
+# ============================================
+ssl/
+certs/
+*.keystore
+*.truststore
+!config/ssl/.gitkeep
+!certs/.gitkeep
+
+# ============================================
+# Temporary Files
+# ============================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+~*
+*~
+
+# ============================================
+# Documentation Build
+# ============================================
+docs/_build/
+docs/_static/
+docs/_templates/
+site/
+.docusaurus/
+_site/
+.jekyll-cache/
+.jekyll-metadata
+
+# ============================================
+# Monitoring & Metrics
+# ============================================
+prometheus-data/
+grafana-data/
+grafana-storage/
+influxdb-data/
+telegraf-data/
+
+# ============================================
+# Message Queues
+# ============================================
+kafka-logs/
+kafka-data/
+zookeeper-data/
+rabbitmq-data/
+
+# ============================================
+# Service-Specific Working Directories
+# ============================================
+workspace/
+shared-workspace/
+!workspace/.gitkeep
+notebooks-output/
+dags-generated/
+transformations/
+exports/
+imports/
+uploads/
+downloads/
+
+# ============================================
+# Iceberg & Hive
+# ============================================
+warehouse/
+hive-warehouse/
+.hive-staging/
+metadata/
+!metadata/.gitkeep
+table-metadata/
+snapshots/
+
+# ============================================
+# Trino
+# ============================================
+trino-data/
+.trino/
+trino-etc/
+!config/trino/
+
+# ============================================
+# Custom Patterns
+# ============================================
+# Add any project-specific patterns here
+local-only/
+do-not-commit/
+private/
+sensitive/
+
+# ============================================
+# Allowed Files (Exceptions)
+# ============================================
+!.gitignore
+!.gitattributes
+!README.md
+!LICENSE
+!CONTRIBUTING.md
+!Makefile
+!docker-compose.*.yml
+!.github/
+!.github/**
+!scripts/
+!scripts/**
+!config/
+!config/**/.gitkeep
+!dags/.gitkeep
+!plugins/.gitkeep
+!notebooks/.gitkeep
+!jars/.gitkeep
+!data/.gitkeep

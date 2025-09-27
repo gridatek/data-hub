@@ -1,0 +1,211 @@
+name: Test Full Stack Integration
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+
+jobs:
+  test-full-stack:
+    name: Test Full Stack Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=admin
+          POSTGRES_PASSWORD=admin123
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          AIRFLOW_UID=50000
+          AIRFLOW_USER=admin
+          AIRFLOW_PASSWORD=admin
+          AIRFLOW_FERNET_KEY=12345678901234567890123456789012345678901234
+          AIRFLOW_SECRET_KEY=secret12345678901234567890123456789012345678901234
+          JUPYTER_TOKEN=jupyter123
+          SPARK_MODE=cluster
+          EOF
+      
+      - name: Create required directories and files
+        run: |
+          mkdir -p config/{spark,trino/catalog} dags plugins notebooks scripts jars
+          
+          # Create PostgreSQL init script
+          cat > scripts/init-postgres.sh <<'EOF'
+          #!/bin/bash
+          set -e
+          psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+              CREATE DATABASE airflow;
+              CREATE DATABASE hive_metastore;
+              CREATE DATABASE trino;
+          EOSQL
+          EOF
+          chmod +x scripts/init-postgres.sh
+          
+          # Create Spark config
+          cat > config/spark/spark-defaults.conf <<EOF
+          spark.master spark://spark-master:7077
+          EOF
+          
+          # Create Trino configs
+          cat > config/trino/config.properties <<EOF
+          coordinator=true
+          node-scheduler.include-coordinator=true
+          http-server.http.port=8080
+          query.max-memory=2GB
+          query.max-memory-per-node=1GB
+          discovery-server.enabled=true
+          discovery.uri=http://localhost:8080
+          EOF
+          
+          cat > config/trino/jvm.config <<EOF
+          -server
+          -Xmx2G
+          -XX:+UseG1GC
+          -XX:G1HeapRegionSize=32M
+          -XX:+UseGCOverheadLimit
+          -XX:+ExplicitGCInvokesConcurrent
+          -XX:+HeapDumpOnOutOfMemoryError
+          -XX:+ExitOnOutOfMemoryError
+          -Djdk.attach.allowAttachSelf=true
+          EOF
+          
+          cat > config/trino/catalog/postgres.properties <<EOF
+          connector.name=postgresql
+          connection-url=jdbc:postgresql://postgres:5432/postgres
+          connection-user=admin
+          connection-password=admin123
+          EOF
+          
+          # Create dummy JARs
+          touch jars/{iceberg-spark-runtime,aws-java-sdk-bundle,hadoop-aws,postgresql-42.5.1}.jar
+          
+          # Create test DAG
+          cat > dags/integration_test.py <<'EOF'
+          from airflow import DAG
+          from airflow.operators.bash import BashOperator
+          from datetime import datetime
+          
+          dag = DAG('integration_test', 
+                    start_date=datetime(2024, 1, 1),
+                    schedule_interval=None)
+          
+          task = BashOperator(
+              task_id='test_task',
+              bash_command='echo "Integration test"',
+              dag=dag
+          )
+          EOF
+      
+      - name: Start all services
+        run: |
+          docker-compose \
+            -f docker-compose.base.yml \
+            -f docker-compose.postgres.yml \
+            -f docker-compose.minio.yml \
+            -f docker-compose.hive.yml \
+            -f docker-compose.spark.yml \
+            -f docker-compose.airflow.yml \
+            -f docker-compose.trino.yml \
+            up -d
+      
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for PostgreSQL..."
+          timeout 60 bash -c 'until docker exec data-hub-postgres pg_isready -U admin; do sleep 2; done'
+          
+          echo "Waiting for MinIO..."
+          timeout 60 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 2; done'
+          
+          echo "Waiting for Spark Master..."
+          timeout 90 bash -c 'until curl -f http://localhost:8080; do sleep 3; done'
+          
+          echo "Waiting for Airflow..."
+          timeout 180 bash -c 'until curl -f http://localhost:8088/health; do sleep 5; done'
+          
+          echo "Waiting for Trino..."
+          timeout 120 bash -c 'until curl -f http://localhost:8089/v1/info; do sleep 5; done'
+          
+          echo "All services are healthy!"
+      
+      - name: Test service connectivity
+        run: |
+          # Test PostgreSQL databases
+          docker exec data-hub-postgres psql -U admin -c "\l" | grep -E "airflow"
+          
+          # Test MinIO buckets
+          docker exec data-hub-minio-init mc ls myminio/ || true
+          
+          # Test Spark workers
+          curl -s http://localhost:8080/json/ | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          assert len(data.get('workers', [])) >= 2, 'Spark workers not registered'
+          print('Spark cluster OK')
+          "
+          
+          # Test Airflow DAGs
+          docker exec data-hub-airflow-scheduler airflow dags list | grep integration_test
+          
+          # Test Trino
+          docker exec data-hub-trino trino --execute "SELECT 1"
+      
+      - name: Run integration tests
+        run: |
+          # Test Spark job submission from Airflow
+          docker exec data-hub-airflow-scheduler airflow dags test integration_test 2024-01-01
+          
+          # Test data flow through the stack
+          echo "CREATE TABLE test (id INT, name VARCHAR(50));" | \
+            docker exec -i data-hub-postgres psql -U admin -d airflow
+          
+          # Test Trino query to PostgreSQL
+          docker exec data-hub-trino trino --execute "SHOW CATALOGS" | grep postgres
+      
+      - name: Generate test report
+        if: always()
+        run: |
+          echo "# Stack Test Report" > test-report.md
+          echo "## Service Status" >> test-report.md
+          docker-compose \
+            -f docker-compose.base.yml \
+            -f docker-compose.postgres.yml \
+            -f docker-compose.minio.yml \
+            -f docker-compose.hive.yml \
+            -f docker-compose.spark.yml \
+            -f docker-compose.airflow.yml \
+            -f docker-compose.trino.yml \
+            ps >> test-report.md
+          
+          echo "## Service Logs Summary" >> test-report.md
+          for service in postgres minio spark-master airflow-webserver trino; do
+            echo "### $service" >> test-report.md
+            docker logs data-hub-$service 2>&1 | tail -5 >> test-report.md
+          done
+      
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: integration-test-report
+          path: test-report.md
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose \
+            -f docker-compose.base.yml \
+            -f docker-compose.postgres.yml \
+            -f docker-compose.minio.yml \
+            -f docker-compose.hive.yml \
+            -f docker-compose.spark.yml \
+            -f docker-compose.airflow.yml \
+            -f docker-compose.trino.yml \
+            down -v

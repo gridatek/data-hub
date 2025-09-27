@@ -1,0 +1,103 @@
+name: Test Spark Cluster
+
+on:
+  push:
+    paths:
+      - 'docker-compose.spark.yml'
+      - 'config/spark/**'
+      - '.github/workflows/test-spark.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.spark.yml'
+      - 'config/spark/**'
+  workflow_dispatch:
+
+jobs:
+  test-spark:
+    name: Test Spark Cluster
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          SPARK_MODE=cluster
+          EOF
+      
+      - name: Create Spark configuration
+        run: |
+          mkdir -p config/spark jars
+          cat > config/spark/spark-defaults.conf <<EOF
+          spark.master                     spark://spark-master:7077
+          spark.eventLog.enabled           false
+          EOF
+          
+          # Create dummy JAR files for testing
+          touch jars/iceberg-spark-runtime.jar
+          touch jars/aws-java-sdk-bundle.jar
+          touch jars/hadoop-aws.jar
+      
+      - name: Start Spark cluster
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml up -d spark-master spark-worker-1 spark-worker-2
+      
+      - name: Wait for Spark Master
+        run: |
+          timeout 90 bash -c 'until curl -f http://localhost:8080; do sleep 2; done'
+          echo "Spark Master UI is accessible"
+      
+      - name: Verify workers registered
+        run: |
+          sleep 10
+          curl -s http://localhost:8080/json/ | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          workers = data.get('workers', [])
+          print(f'Workers registered: {len(workers)}')
+          assert len(workers) >= 2, 'Expected at least 2 workers'
+          for worker in workers:
+              print(f\"Worker: {worker['id']} - State: {worker['state']}\")
+              assert worker['state'] == 'ALIVE', f\"Worker {worker['id']} is not ALIVE\"
+          "
+      
+      - name: Test Spark job submission
+        run: |
+          docker exec data-hub-spark-master spark-submit \
+            --master spark://spark-master:7077 \
+            --deploy-mode client \
+            --class org.apache.spark.examples.SparkPi \
+            /opt/spark/examples/jars/spark-examples_2.12-3.5.0.jar 10
+      
+      - name: Test PySpark
+        run: |
+          docker exec data-hub-spark-master python3 -c "
+          from pyspark.sql import SparkSession
+          spark = SparkSession.builder \
+              .appName('Test') \
+              .master('spark://spark-master:7077') \
+              .getOrCreate()
+          
+          # Create test DataFrame
+          df = spark.range(10)
+          count = df.count()
+          print(f'DataFrame count: {count}')
+          assert count == 10, 'Expected count of 10'
+          
+          spark.stop()
+          print('PySpark test passed!')
+          "
+      
+      - name: Check Spark logs for errors
+        if: failure()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml logs spark-master
+          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml logs spark-worker-1
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml down -v

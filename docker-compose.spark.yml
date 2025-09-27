@@ -1,0 +1,98 @@
+version: '3.8'
+
+x-spark-common: &spark-common
+  image: apache/spark:3.5.0-scala2.12-java11-python3-ubuntu
+  environment:
+    SPARK_MODE: ${SPARK_MODE:-cluster}
+    SPARK_MASTER_URL: spark://spark-master:7077
+    SPARK_RPC_AUTHENTICATION_ENABLED: no
+    SPARK_RPC_ENCRYPTION_ENABLED: no
+    SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: no
+    SPARK_SSL_ENABLED: no
+    AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
+    AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+    AWS_REGION: us-east-1
+  volumes:
+    - ./config/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+    - ./jars/iceberg-spark-runtime-3.5_2.12-1.4.2.jar:/opt/spark/jars/iceberg-spark-runtime.jar
+    - ./jars/aws-java-sdk-bundle-1.12.367.jar:/opt/spark/jars/aws-java-sdk-bundle.jar
+    - ./jars/hadoop-aws-3.3.4.jar:/opt/spark/jars/hadoop-aws.jar
+    - shared-workspace:/opt/workspace
+  networks:
+    - data-hub
+
+services:
+  spark-master:
+    <<: *spark-common
+    container_name: data-hub-spark-master
+    restart: unless-stopped
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      <<: *spark-common
+      SPARK_MASTER_PORT: 7077
+      SPARK_MASTER_WEBUI_PORT: 8080
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      data-hub:
+        ipv4_address: 172.28.1.10
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+
+  spark-worker-1:
+    <<: *spark-common
+    container_name: data-hub-spark-worker-1
+    restart: unless-stopped
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    environment:
+      <<: *spark-common
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
+      SPARK_WORKER_WEBUI_PORT: 8081
+    ports:
+      - "8081:8081"
+    networks:
+      data-hub:
+        ipv4_address: 172.28.1.11
+
+  spark-worker-2:
+    <<: *spark-common
+    container_name: data-hub-spark-worker-2
+    restart: unless-stopped
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    environment:
+      <<: *spark-common
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
+      SPARK_WORKER_WEBUI_PORT: 8082
+    ports:
+      - "8082:8082"
+    networks:
+      data-hub:
+        ipv4_address: 172.28.1.12
+
+  spark-history-server:
+    <<: *spark-common
+    container_name: data-hub-spark-history
+    restart: unless-stopped
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer
+    environment:
+      <<: *spark-common
+      SPARK_HISTORY_OPTS: >
+        -Dspark.history.fs.logDirectory=s3a://spark-logs/
+        -Dspark.history.ui.port=18080
+    ports:
+      - "18080:18080"
+    depends_on:
+      - minio
+    networks:
+      data-hub:
+        ipv4_address: 172.28.1.13

@@ -1,0 +1,140 @@
+name: Test Jupyter
+
+on:
+  push:
+    paths:
+      - 'docker-compose.jupyter.yml'
+      - 'notebooks/**'
+      - '.github/workflows/test-jupyter.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.jupyter.yml'
+      - 'notebooks/**'
+  workflow_dispatch:
+
+jobs:
+  test-jupyter:
+    name: Test Jupyter Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          JUPYTER_TOKEN=jupyter123
+          SPARK_MODE=cluster
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          EOF
+      
+      - name: Create required directories
+        run: |
+          mkdir -p config/spark notebooks jars
+          
+          # Create Spark config
+          cat > config/spark/spark-defaults.conf <<EOF
+          spark.master spark://spark-master:7077
+          EOF
+          
+          # Create dummy JARs
+          touch jars/{iceberg-spark-runtime,aws-java-sdk-bundle,hadoop-aws}.jar
+          
+          # Create test notebook
+          cat > notebooks/test_notebook.ipynb <<'EOF'
+          {
+           "cells": [
+            {
+             "cell_type": "code",
+             "execution_count": null,
+             "metadata": {},
+             "outputs": [],
+             "source": [
+              "# Test basic Python functionality\n",
+              "print('Hello from Jupyter!')\n",
+              "import pandas as pd\n",
+              "df = pd.DataFrame({'test': [1, 2, 3]})\n",
+              "print(df)"
+             ]
+            }
+           ],
+           "metadata": {
+            "kernelspec": {
+             "display_name": "Python 3",
+             "language": "python",
+             "name": "python3"
+            }
+           },
+           "nbformat": 4,
+           "nbformat_minor": 4
+          }
+          EOF
+      
+      - name: Start Spark cluster (dependency)
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml up -d spark-master
+          timeout 90 bash -c 'until curl -f http://localhost:8080; do sleep 2; done'
+      
+      - name: Start Jupyter
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.jupyter.yml up -d
+      
+      - name: Wait for Jupyter to be ready
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:8888/api; do sleep 2; done'
+          echo "Jupyter is ready"
+      
+      - name: Test Jupyter API
+        run: |
+          # Test Jupyter API endpoints
+          curl -s http://localhost:8888/api/sessions?token=jupyter123 | python3 -m json.tool
+          curl -s http://localhost:8888/api/kernelspecs?token=jupyter123 | python3 -m json.tool
+      
+      - name: Test notebook execution
+        run: |
+          # Test that Python kernel is available
+          curl -s http://localhost:8888/api/kernelspecs?token=jupyter123 | grep python3
+          
+          # Test notebook listing
+          curl -s "http://localhost:8888/api/contents/notebooks?token=jupyter123" | python3 -m json.tool
+      
+      - name: Test PySpark integration
+        run: |
+          # Test that Spark master is accessible from Jupyter container
+          docker exec data-hub-jupyter curl -f http://spark-master:8080
+          
+          # Test PySpark import
+          docker exec data-hub-jupyter python3 -c "
+          try:
+              import pyspark
+              print('PySpark import successful')
+              print(f'PySpark version: {pyspark.__version__}')
+          except ImportError as e:
+              print(f'PySpark import failed: {e}')
+              exit(1)
+          "
+      
+      - name: Test workspace volumes
+        run: |
+          # Test that shared workspace is mounted
+          docker exec data-hub-jupyter ls -la /home/jovyan/workspace
+          docker exec data-hub-jupyter ls -la /home/jovyan/notebooks
+          
+          # Create test file and verify persistence
+          docker exec data-hub-jupyter touch /home/jovyan/work/test_file.txt
+          docker exec data-hub-jupyter ls -la /home/jovyan/work/test_file.txt
+      
+      - name: Check logs for errors
+        if: failure()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.jupyter.yml logs jupyter
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose \
+            -f docker-compose.base.yml \
+            -f docker-compose.spark.yml \
+            -f docker-compose.jupyter.yml \
+            down -v

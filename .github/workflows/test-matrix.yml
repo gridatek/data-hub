@@ -1,0 +1,154 @@
+name: Test Services Matrix
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-services:
+    name: Test ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: postgres
+            compose-files: "docker-compose.base.yml docker-compose.postgres.yml"
+            health-check: "docker exec data-hub-postgres pg_isready -U admin"
+            
+          - service: minio
+            compose-files: "docker-compose.base.yml docker-compose.minio.yml"
+            health-check: "curl -f http://localhost:9000/minio/health/live"
+            
+          - service: spark
+            compose-files: "docker-compose.base.yml docker-compose.spark.yml"
+            health-check: "curl -f http://localhost:8080"
+            
+          - service: airflow
+            compose-files: "docker-compose.base.yml docker-compose.postgres.yml docker-compose.airflow.yml"
+            health-check: "curl -f http://localhost:8088/health"
+            
+          - service: trino
+            compose-files: "docker-compose.base.yml docker-compose.postgres.yml docker-compose.minio.yml docker-compose.hive.yml docker-compose.trino.yml"
+            health-check: "curl -f http://localhost:8089/v1/info"
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup environment
+        run: |
+          # Create .env file
+          cat > .env <<EOF
+          POSTGRES_USER=admin
+          POSTGRES_PASSWORD=admin123
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          AIRFLOW_UID=50000
+          AIRFLOW_USER=admin
+          AIRFLOW_PASSWORD=admin
+          AIRFLOW_FERNET_KEY=12345678901234567890123456789012345678901234
+          AIRFLOW_SECRET_KEY=secret12345678901234567890123456789012345678901234
+          SPARK_MODE=cluster
+          EOF
+          
+          # Create required directories
+          mkdir -p config/{spark,trino/catalog} dags plugins notebooks scripts jars
+          
+          # Create required files
+          touch jars/{iceberg-spark-runtime,aws-java-sdk-bundle,hadoop-aws,postgresql-42.5.1}.jar
+          
+          # Create PostgreSQL init script
+          cat > scripts/init-postgres.sh <<'EOF'
+          #!/bin/bash
+          set -e
+          psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+              CREATE DATABASE airflow;
+              CREATE DATABASE hive_metastore;
+              CREATE DATABASE trino;
+          EOSQL
+          EOF
+          chmod +x scripts/init-postgres.sh
+          
+          # Create Spark config
+          echo "spark.master spark://spark-master:7077" > config/spark/spark-defaults.conf
+          
+          # Create Trino configs
+          cat > config/trino/config.properties <<EOF
+          coordinator=true
+          node-scheduler.include-coordinator=true
+          http-server.http.port=8080
+          query.max-memory=2GB
+          query.max-memory-per-node=1GB
+          discovery-server.enabled=true
+          discovery.uri=http://localhost:8080
+          EOF
+          
+          cat > config/trino/jvm.config <<EOF
+          -server
+          -Xmx2G
+          -XX:+UseG1GC
+          -XX:G1HeapRegionSize=32M
+          -XX:+UseGCOverheadLimit
+          -XX:+ExplicitGCInvokesConcurrent
+          -XX:+HeapDumpOnOutOfMemoryError
+          -XX:+ExitOnOutOfMemoryError
+          -Djdk.attach.allowAttachSelf=true
+          EOF
+          
+          cat > config/trino/catalog/postgres.properties <<EOF
+          connector.name=postgresql
+          connection-url=jdbc:postgresql://postgres:5432/postgres
+          connection-user=admin
+          connection-password=admin123
+          EOF
+      
+      - name: Start ${{ matrix.service }} service
+        run: |
+          docker-compose -f ${{ matrix.compose-files }} up -d
+      
+      - name: Wait for ${{ matrix.service }} to be healthy
+        run: |
+          .github/scripts/wait-for-service.sh \
+            "${{ matrix.service }}" \
+            "${{ matrix.health-check }}" \
+            120
+      
+      - name: Test ${{ matrix.service }} service
+        run: |
+          echo "Running tests for ${{ matrix.service }}..."
+          
+          case "${{ matrix.service }}" in
+            postgres)
+              docker exec data-hub-postgres psql -U admin -c "\l"
+              ;;
+            minio)
+              curl -s http://localhost:9000/minio/health/live | grep -q "MinIO"
+              ;;
+            spark)
+              curl -s http://localhost:8080/json/ | python3 -m json.tool
+              ;;
+            airflow)
+              docker exec data-hub-airflow-scheduler airflow version
+              ;;
+            trino)
+              curl -s http://localhost:8089/v1/info | python3 -m json.tool
+              ;;
+          esac
+      
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Docker Compose Status ==="
+          docker-compose -f ${{ matrix.compose-files }} ps
+          
+          echo "=== Service Logs ==="
+          docker-compose -f ${{ matrix.compose-files }} logs --tail=50
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f ${{ matrix.compose-files }} down -v

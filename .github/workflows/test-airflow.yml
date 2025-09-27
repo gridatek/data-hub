@@ -1,0 +1,108 @@
+name: Test Airflow
+
+on:
+  push:
+    paths:
+      - 'docker-compose.airflow.yml'
+      - 'dags/**'
+      - '.github/workflows/test-airflow.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.airflow.yml'
+      - 'dags/**'
+  workflow_dispatch:
+
+jobs:
+  test-airflow:
+    name: Test Airflow Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=admin
+          POSTGRES_PASSWORD=admin123
+          AIRFLOW_UID=50000
+          AIRFLOW_USER=admin
+          AIRFLOW_PASSWORD=admin
+          AIRFLOW_FERNET_KEY=12345678901234567890123456789012345678901234
+          AIRFLOW_SECRET_KEY=secret12345678901234567890123456789012345678901234
+          EOF
+      
+      - name: Create directories
+        run: |
+          mkdir -p dags plugins logs
+          echo "from airflow import DAG
+          from airflow.operators.bash import BashOperator
+          from datetime import datetime
+          
+          dag = DAG('test_dag', 
+                    start_date=datetime(2024, 1, 1),
+                    schedule_interval=None)
+          
+          task = BashOperator(
+              task_id='test_task',
+              bash_command='echo Test',
+              dag=dag
+          )" > dags/test_dag.py
+      
+      - name: Create init script for PostgreSQL
+        run: |
+          mkdir -p scripts
+          cat > scripts/init-postgres.sh <<'EOF'
+          #!/bin/bash
+          set -e
+          psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+              CREATE DATABASE airflow;
+          EOSQL
+          EOF
+          chmod +x scripts/init-postgres.sh
+      
+      - name: Start PostgreSQL
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml up -d
+          timeout 60 bash -c 'until docker exec data-hub-postgres pg_isready -U admin; do sleep 2; done'
+      
+      - name: Initialize and start Airflow
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml up -d
+      
+      - name: Wait for Airflow webserver
+        run: |
+          timeout 180 bash -c 'until curl -f http://localhost:8088/health; do sleep 5; done'
+          echo "Airflow webserver is healthy"
+      
+      - name: Test Airflow API
+        run: |
+          # Test authentication and API
+          curl -X GET \
+            --user "admin:admin" \
+            http://localhost:8088/api/v1/dags \
+            | python3 -m json.tool
+      
+      - name: List DAGs
+        run: |
+          docker exec data-hub-airflow-scheduler airflow dags list
+      
+      - name: Test DAG parsing
+        run: |
+          docker exec data-hub-airflow-scheduler airflow dags test test_dag 2024-01-01
+      
+      - name: Check scheduler health
+        run: |
+          docker exec data-hub-airflow-scheduler airflow jobs check --job-type SchedulerJob
+      
+      - name: Check logs for errors
+        if: failure()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-init
+          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-webserver
+          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-scheduler
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml -f docker-compose.postgres.yml down -v

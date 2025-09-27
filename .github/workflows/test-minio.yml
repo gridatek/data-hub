@@ -1,0 +1,95 @@
+name: Test MinIO
+
+on:
+  push:
+    paths:
+      - 'docker-compose.minio.yml'
+      - '.github/workflows/test-minio.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.minio.yml'
+  workflow_dispatch:
+
+jobs:
+  test-minio:
+    name: Test MinIO Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          EOF
+      
+      - name: Start MinIO
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml up -d
+      
+      - name: Wait for MinIO to be healthy
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 2; done'
+      
+      - name: Test MinIO client operations
+        run: |
+          # Wait for init container to complete
+          sleep 10
+          
+          # Install MinIO client
+          wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x mc
+          
+          # Configure MinIO client
+          ./mc alias set local http://localhost:9000 minioadmin minioadmin123
+          
+          # List buckets
+          ./mc ls local/
+          
+          # Verify required buckets exist
+          ./mc ls local/ | grep -E "warehouse|spark-logs|airflow|temp"
+          
+          # Test file upload/download
+          echo "test data" > test.txt
+          ./mc cp test.txt local/temp/
+          ./mc cat local/temp/test.txt | grep "test data"
+      
+      - name: Test S3 API compatibility
+        run: |
+          pip install boto3
+          python3 <<EOF
+          import boto3
+          from botocore.client import Config
+          
+          s3 = boto3.client('s3',
+              endpoint_url='http://localhost:9000',
+              aws_access_key_id='minioadmin',
+              aws_secret_access_key='minioadmin123',
+              config=Config(signature_version='s3v4')
+          )
+          
+          # List buckets
+          buckets = s3.list_buckets()
+          print("Buckets:", [b['Name'] for b in buckets['Buckets']])
+          
+          # Upload test object
+          s3.put_object(Bucket='temp', Key='test-s3.txt', Body=b'S3 API test')
+          
+          # Read test object
+          response = s3.get_object(Bucket='temp', Key='test-s3.txt')
+          assert response['Body'].read() == b'S3 API test'
+          print("S3 API test passed!")
+          EOF
+      
+      - name: Check logs for errors
+        if: failure()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml logs minio
+          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml logs minio-init
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml down -v

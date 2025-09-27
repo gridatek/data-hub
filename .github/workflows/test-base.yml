@@ -1,0 +1,46 @@
+name: Test Base Configuration
+
+on:
+  push:
+    paths:
+      - 'docker-compose.base.yml'
+      - '.github/workflows/test-base.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.base.yml'
+  workflow_dispatch:
+
+jobs:
+  test-base:
+    name: Test Base Network and Volumes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=admin
+          POSTGRES_PASSWORD=admin123
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          AIRFLOW_UID=50000
+          EOF
+      
+      - name: Test network creation
+        run: |
+          docker-compose -f docker-compose.base.yml config
+          docker network create data-hub-network || true
+          docker network ls | grep data-hub
+      
+      - name: Test volume creation
+        run: |
+          docker volume create postgres-data
+          docker volume create minio-data
+          docker volume ls | grep -E "postgres-data|minio-data"
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker network rm data-hub-network || true
+          docker volume rm postgres-data minio-data || true
