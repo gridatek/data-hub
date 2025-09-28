@@ -16,8 +16,11 @@ services:
       data-hub:
         ipv4_address: 172.28.1.2
     healthcheck:
-      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   minio-init:
     image: minio/mc:latest
