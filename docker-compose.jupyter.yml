@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   jupyter:
     image: jupyter/pyspark-notebook:spark-3.5.0
