@@ -37,11 +37,11 @@ jobs:
       
       - name: Validate Docker Compose syntax
         run: |
-          docker-compose -f ${{ matrix.compose-file }} config > /dev/null
+          docker compose -f ${{ matrix.compose-file }} config > /dev/null
       
       - name: Check for required environment variables
         run: |
-          docker-compose -f docker-compose.base.yml -f ${{ matrix.compose-file }} config > /dev/null
+          docker compose -f docker-compose.base.yml -f ${{ matrix.compose-file }} config > /dev/null
 
   lint-compose:
     name: Lint Compose Files
@@ -57,7 +57,7 @@ jobs:
         run: |
           for file in docker-compose.*.yml; do
             echo "Linting $file..."
-            docker-compose-linter -f $file || true
+  docker-compose-linter -f $file || true
           done
 
   security-scan:

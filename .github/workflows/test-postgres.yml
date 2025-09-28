@@ -43,7 +43,7 @@ jobs:
       
       - name: Start PostgreSQL
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.postgres.yml up -d
       
       - name: Wait for PostgreSQL to be healthy
         run: |
@@ -56,15 +56,15 @@ jobs:
       - name: Test data persistence
         run: |
           docker exec data-hub-postgres psql -U admin -d airflow -c "CREATE TABLE test (id int);"
-          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml restart postgres
+          docker compose -f docker-compose.base.yml -f docker-compose.postgres.yml restart postgres
           sleep 10
           docker exec data-hub-postgres psql -U admin -d airflow -c "\dt" | grep test
       
       - name: Check logs for errors
         if: failure()
-        run: docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml logs postgres
+        run: docker compose -f docker-compose.base.yml -f docker-compose.postgres.yml logs postgres
       
       - name: Cleanup
         if: always()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml down -v
+          docker compose -f docker-compose.base.yml -f docker-compose.postgres.yml down -v

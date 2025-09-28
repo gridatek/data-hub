@@ -106,7 +106,7 @@ jobs:
       
       - name: Start all services
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.minio.yml \
@@ -174,7 +174,7 @@ jobs:
         run: |
           echo "# Stack Test Report" > test-report.md
           echo "## Service Status" >> test-report.md
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.minio.yml \
@@ -200,7 +200,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.minio.yml \

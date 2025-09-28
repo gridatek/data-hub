@@ -43,7 +43,7 @@ jobs:
       
       - name: Start Spark cluster
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml up -d spark-master spark-worker-1 spark-worker-2
+          docker compose -f docker-compose.base.yml -f docker-compose.spark.yml up -d spark-master spark-worker-1 spark-worker-2
       
       - name: Wait for Spark Master
         run: |
@@ -94,10 +94,10 @@ jobs:
       - name: Check Spark logs for errors
         if: failure()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml logs spark-master
-          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml logs spark-worker-1
+          docker compose -f docker-compose.base.yml -f docker-compose.spark.yml logs spark-master
+          docker compose -f docker-compose.base.yml -f docker-compose.spark.yml logs spark-worker-1
       
       - name: Cleanup
         if: always()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml down -v
+          docker compose -f docker-compose.base.yml -f docker-compose.spark.yml down -v

@@ -36,7 +36,7 @@ jobs:
       
       - name: Start storage services
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.minio.yml \
@@ -66,7 +66,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.minio.yml \
@@ -95,7 +95,7 @@ jobs:
       
       - name: Start compute services
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.minio.yml \
             -f docker-compose.spark.yml \
@@ -135,7 +135,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.minio.yml \
             -f docker-compose.spark.yml \
@@ -196,7 +196,7 @@ jobs:
       
       - name: Start orchestration services
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.spark.yml \
@@ -225,7 +225,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.spark.yml \

@@ -73,12 +73,12 @@ jobs:
       
       - name: Start Spark cluster (dependency)
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.spark.yml up -d spark-master
+          docker compose -f docker-compose.base.yml -f docker-compose.spark.yml up -d spark-master
           timeout 90 bash -c 'until curl -f http://localhost:8080; do sleep 2; done'
       
       - name: Start Jupyter
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.jupyter.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.jupyter.yml up -d
       
       - name: Wait for Jupyter to be ready
         run: |
@@ -128,12 +128,12 @@ jobs:
       - name: Check logs for errors
         if: failure()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.jupyter.yml logs jupyter
+          docker compose -f docker-compose.base.yml -f docker-compose.jupyter.yml logs jupyter
       
       - name: Cleanup
         if: always()
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.spark.yml \
             -f docker-compose.jupyter.yml \

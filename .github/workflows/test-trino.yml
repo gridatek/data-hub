@@ -81,7 +81,7 @@ jobs:
       
       - name: Start dependencies
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml -f docker-compose.minio.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.postgres.yml -f docker-compose.minio.yml up -d
           
           # Wait for dependencies
           timeout 60 bash -c 'until docker exec data-hub-postgres pg_isready -U admin; do sleep 2; done'
@@ -89,12 +89,12 @@ jobs:
       
       - name: Start Hive Metastore
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.hive.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.hive.yml up -d
           sleep 30  # Give Hive Metastore time to initialize
       
       - name: Start Trino
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.trino.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.trino.yml up -d
       
       - name: Wait for Trino to be healthy
         run: |
@@ -123,13 +123,13 @@ jobs:
       - name: Check logs for errors
         if: failure()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.trino.yml logs trino
-          docker-compose -f docker-compose.base.yml -f docker-compose.hive.yml logs hive-metastore
+          docker compose -f docker-compose.base.yml -f docker-compose.trino.yml logs trino
+          docker compose -f docker-compose.base.yml -f docker-compose.hive.yml logs hive-metastore
       
       - name: Cleanup
         if: always()
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.base.yml \
             -f docker-compose.postgres.yml \
             -f docker-compose.minio.yml \

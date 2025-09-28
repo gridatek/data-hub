@@ -63,12 +63,12 @@ jobs:
       
       - name: Start PostgreSQL
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.postgres.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.postgres.yml up -d
           timeout 60 bash -c 'until docker exec data-hub-postgres pg_isready -U admin; do sleep 2; done'
       
       - name: Initialize and start Airflow
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.airflow.yml up -d
       
       - name: Wait for Airflow webserver
         run: |
@@ -98,11 +98,11 @@ jobs:
       - name: Check logs for errors
         if: failure()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-init
-          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-webserver
-          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-scheduler
+          docker compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-init
+          docker compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-webserver
+          docker compose -f docker-compose.base.yml -f docker-compose.airflow.yml logs airflow-scheduler
       
       - name: Cleanup
         if: always()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.airflow.yml -f docker-compose.postgres.yml down -v
+          docker compose -f docker-compose.base.yml -f docker-compose.airflow.yml -f docker-compose.postgres.yml down -v

@@ -108,7 +108,7 @@ jobs:
       
       - name: Start ${{ matrix.service }} service
         run: |
-          docker-compose -f ${{ matrix.compose-files }} up -d
+          docker compose -f ${{ matrix.compose-files }} up -d
       
       - name: Wait for ${{ matrix.service }} to be healthy
         run: |
@@ -143,12 +143,12 @@ jobs:
         if: failure()
         run: |
           echo "=== Docker Compose Status ==="
-          docker-compose -f ${{ matrix.compose-files }} ps
+          docker compose -f ${{ matrix.compose-files }} ps
           
           echo "=== Service Logs ==="
-          docker-compose -f ${{ matrix.compose-files }} logs --tail=50
+          docker compose -f ${{ matrix.compose-files }} logs --tail=50
       
       - name: Cleanup
         if: always()
         run: |
-          docker-compose -f ${{ matrix.compose-files }} down -v
+          docker compose -f ${{ matrix.compose-files }} down -v

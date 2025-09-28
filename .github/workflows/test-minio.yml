@@ -27,7 +27,7 @@ jobs:
       
       - name: Start MinIO
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml up -d
+          docker compose -f docker-compose.base.yml -f docker-compose.minio.yml up -d
       
       - name: Wait for MinIO to be healthy
         run: |
@@ -86,10 +86,10 @@ jobs:
       - name: Check logs for errors
         if: failure()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml logs minio
-          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml logs minio-init
+          docker compose -f docker-compose.base.yml -f docker-compose.minio.yml logs minio
+          docker compose -f docker-compose.base.yml -f docker-compose.minio.yml logs minio-init
       
       - name: Cleanup
         if: always()
         run: |
-          docker-compose -f docker-compose.base.yml -f docker-compose.minio.yml down -v
+          docker compose -f docker-compose.base.yml -f docker-compose.minio.yml down -v
